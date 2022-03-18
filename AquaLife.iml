@@ -12,14 +12,14 @@
         <CLASSES />
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$MODULE_DIR$/../htwg/S6/VS/aqua-blatt1-src.jar!/" />
+          <root url="jar://$MODULE_DIR$/lib/aqua-blatt1-src.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library">
       <library>
         <CLASSES>
-          <root url="jar://$MODULE_DIR$/../htwg/S6/VS/messaging.jar!/" />
+          <root url="jar://$MODULE_DIR$/lib/messaging.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES />
