@@ -1,6 +1,5 @@
 package aqua.blatt1.broker;
 
-import aqua.blatt1.client.ClientCommunicator;
 import aqua.blatt1.common.Direction;
 import aqua.blatt1.common.FishModel;
 import aqua.blatt1.common.Properties;
@@ -11,6 +10,7 @@ import aqua.blatt1.common.msgtypes.RegisterResponse;
 import messaging.Endpoint;
 import messaging.Message;
 
+import javax.swing.*;
 import java.io.Serializable;
 import java.net.InetSocketAddress;
 import java.util.concurrent.ExecutorService;
@@ -22,6 +22,7 @@ public class Broker {
     private final Endpoint endpoint;
     private volatile ClientCollection<InetSocketAddress> clients;
     private volatile Integer currentId;
+    private volatile static boolean stopRequested = false;
 
     public Broker(int port) {
         endpoint = new Endpoint(port);
@@ -84,16 +85,27 @@ public class Broker {
     }
 
     public static void main(String[] args) {
+        Thread guiThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                int input = JOptionPane.showConfirmDialog(null,
+                        "Press OK button to stop server", "Message", JOptionPane.DEFAULT_OPTION);
+
+                if(input == 0){
+                    stopRequested = true;
+                }
+            }
+        });
+        guiThread.start();
+
         Broker broker = new Broker(Properties.PORT);
         broker.broker();
     }
 
     public void broker() {
-        boolean done = false;
-
         ExecutorService executor = Executors.newCachedThreadPool();
 
-        while (!done) {
+        while (!stopRequested) {
             Message message = this.endpoint.blockingReceive();
             executor.execute(new BrokerTask(message));
         }
