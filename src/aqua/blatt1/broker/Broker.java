@@ -15,8 +15,8 @@ import java.io.Serializable;
 import java.net.InetSocketAddress;
 
 public class Broker {
-    private Endpoint endpoint;
-    private ClientCollection<InetSocketAddress> clients;
+    private final Endpoint endpoint;
+    private final ClientCollection<InetSocketAddress> clients;
     private int currentId;
 
     public Broker(int port) {
@@ -38,12 +38,12 @@ public class Broker {
 
             if (payload instanceof RegisterRequest) {
                register(sender);
-            } else if (payload instanceof DeregisterRequest) {
+            }
+            if (payload instanceof DeregisterRequest) {
                 deregister(sender);
-            } else if (payload instanceof HandoffRequest) {
+            }
+            if (payload instanceof HandoffRequest) {
                 handoffFish(sender, payload);
-            } else {
-
             }
         }
     }
@@ -64,19 +64,9 @@ public class Broker {
         FishModel fish = hor.getFish();
         InetSocketAddress target = null;
         if(fish.getDirection().equals(Direction.LEFT)){
-            // If client is first
-            if (clients.indexOf(sender) == 0) {
-                target = clients.getClient(clients.size() - 1);
-            } else {
-                target = clients.getClient(clients.indexOf(sender) - 1);
-            }
+            target = clients.getLeftNeighorOf(clients.indexOf(sender));
         } else {
-            // If client is last
-            if (clients.indexOf(sender) == clients.size() - 1) {
-                target = clients.getClient(0);
-            } else {
-                target = clients.getClient(clients.indexOf(sender) + 1);
-            }
+            target = clients.getRightNeighorOf(clients.indexOf(sender));
         }
         endpoint.send(target, hor);
     }
