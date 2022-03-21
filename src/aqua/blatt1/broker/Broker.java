@@ -13,11 +13,15 @@ import messaging.Message;
 
 import java.io.Serializable;
 import java.net.InetSocketAddress;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class Broker {
     private final Endpoint endpoint;
-    private final ClientCollection<InetSocketAddress> clients;
-    private int currentId;
+    private volatile ClientCollection<InetSocketAddress> clients;
+    private volatile Integer currentId;
 
     public Broker(int port) {
         endpoint = new Endpoint(port);
@@ -25,19 +29,21 @@ public class Broker {
         currentId = 0;
     }
 
-    public static void main(String[] args) {
-        Broker broker = new Broker(Properties.PORT);
-        broker.broker();
-    }
+    public class BrokerTask implements Runnable {
+        private final Message message;
+        ReadWriteLock lock = new ReentrantReadWriteLock();
 
-    public void broker() {
-        while (true) {
-            Message message = this.endpoint.blockingReceive();
+        public BrokerTask(Message message) {
+            this.message = message;
+        }
+
+        @Override
+        public void run() {
             Serializable payload = message.getPayload();
             InetSocketAddress sender = message.getSender();
 
             if (payload instanceof RegisterRequest) {
-               register(sender);
+                register(sender);
             }
             if (payload instanceof DeregisterRequest) {
                 deregister(sender);
@@ -46,28 +52,52 @@ public class Broker {
                 handoffFish(sender, payload);
             }
         }
-    }
 
-    private void register(InetSocketAddress sender) {
-        String id = "tank " + currentId;
-        currentId++;
-        clients.add(id, sender);
-        endpoint.send(sender, new RegisterResponse(id));
-    }
-
-    private void deregister(InetSocketAddress sender) {
-        clients.remove(clients.indexOf(sender));
-    }
-
-    private void handoffFish(InetSocketAddress sender, Serializable payload) {
-        HandoffRequest hor = (HandoffRequest)payload;
-        FishModel fish = hor.getFish();
-        InetSocketAddress target = null;
-        if(fish.getDirection().equals(Direction.LEFT)){
-            target = clients.getLeftNeighorOf(clients.indexOf(sender));
-        } else {
-            target = clients.getRightNeighorOf(clients.indexOf(sender));
+        private synchronized void register(InetSocketAddress sender) {
+            String id = "tank " + currentId;
+            currentId++;
+            clients.add(id, sender);
+            endpoint.send(sender, new RegisterResponse(id));
         }
-        endpoint.send(target, hor);
+
+        private synchronized void deregister(InetSocketAddress sender) {
+            clients.remove(clients.indexOf(sender));
+        }
+
+        private void handoffFish(InetSocketAddress sender, Serializable payload) {
+            HandoffRequest hor = (HandoffRequest) payload;
+            FishModel fish = hor.getFish();
+            InetSocketAddress target = null;
+
+            lock.readLock().lock();
+
+            if (fish.getDirection().equals(Direction.LEFT)) {
+                target = clients.getLeftNeighorOf(clients.indexOf(sender));
+            } else {
+                target = clients.getRightNeighorOf(clients.indexOf(sender));
+            }
+
+            lock.readLock().unlock();
+
+            endpoint.send(target, hor);
+        }
+    }
+
+    public static void main(String[] args) {
+        Broker broker = new Broker(Properties.PORT);
+        broker.broker();
+    }
+
+    public void broker() {
+        boolean done = false;
+
+        ExecutorService executor = Executors.newCachedThreadPool();
+
+        while (!done) {
+            Message message = this.endpoint.blockingReceive();
+            executor.execute(new BrokerTask(message));
+        }
+
+        executor.shutdown();
     }
 }
