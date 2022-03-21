@@ -3,10 +3,7 @@ package aqua.blatt1.broker;
 import aqua.blatt1.common.Direction;
 import aqua.blatt1.common.FishModel;
 import aqua.blatt1.common.Properties;
-import aqua.blatt1.common.msgtypes.DeregisterRequest;
-import aqua.blatt1.common.msgtypes.HandoffRequest;
-import aqua.blatt1.common.msgtypes.RegisterRequest;
-import aqua.blatt1.common.msgtypes.RegisterResponse;
+import aqua.blatt1.common.msgtypes.*;
 import messaging.Endpoint;
 import messaging.Message;
 
@@ -52,6 +49,9 @@ public class Broker {
             if (payload instanceof HandoffRequest) {
                 handoffFish(sender, payload);
             }
+            if (payload instanceof PoisonPill) {
+                stopRequested = true;
+            }
         }
 
         private synchronized void register(InetSocketAddress sender) {
@@ -88,12 +88,8 @@ public class Broker {
         Thread guiThread = new Thread(new Runnable() {
             @Override
             public void run() {
-                int input = JOptionPane.showConfirmDialog(null,
-                        "Press OK button to stop server", "Message", JOptionPane.DEFAULT_OPTION);
-
-                if(input == 0){
-                    stopRequested = true;
-                }
+                JOptionPane.showMessageDialog(null, "Press OK button to stop server.");
+                stopRequested = true;
             }
         });
         guiThread.start();
