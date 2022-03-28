@@ -49,9 +49,6 @@ public class Broker {
             if (payload instanceof HandoffRequest) {
                 handoffFish(sender, payload);
             }
-            if (payload instanceof PoisonPill) {
-                stopRequested = true;
-            }
         }
 
         private synchronized void register(InetSocketAddress sender) {
@@ -103,6 +100,9 @@ public class Broker {
 
         while (!stopRequested) {
             Message message = this.endpoint.blockingReceive();
+            if (message.getPayload() instanceof PoisonPill) {
+                break;
+            }
             executor.execute(new BrokerTask(message));
         }
 
