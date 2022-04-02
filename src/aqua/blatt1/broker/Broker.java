@@ -29,6 +29,7 @@ public class Broker {
 
     public class BrokerTask implements Runnable {
         private final Message message;
+        // TODO also move lock to broker, because only one thread will access it?
         ReadWriteLock lock = new ReentrantReadWriteLock();
 
         public BrokerTask(Message message) {
@@ -51,14 +52,19 @@ public class Broker {
             }
         }
 
+        // TODO move these methods to broker? Now synchronized doesn't really make sense,
+        // because only one thread will access this object of BrokerTask. Synchronized keyword is used for objects
+        // that are accessed by multiple threads.
         private synchronized void register(InetSocketAddress sender) {
             String id = "tank " + currentId;
             currentId++;
+            // TODO write lock here maybe?
             clients.add(id, sender);
             endpoint.send(sender, new RegisterResponse(id));
         }
 
         private synchronized void deregister(InetSocketAddress sender) {
+            // TODO write lock here maybe?
             clients.remove(clients.indexOf(sender));
         }
 
@@ -67,6 +73,7 @@ public class Broker {
             FishModel fish = hor.getFish();
             InetSocketAddress target = null;
 
+            // TODO where is the write lock?
             lock.readLock().lock();
 
             if (fish.getDirection().equals(Direction.LEFT)) {
@@ -96,6 +103,7 @@ public class Broker {
     }
 
     public void broker() {
+        // TODO use constant thread pool
         ExecutorService executor = Executors.newCachedThreadPool();
 
         while (!stopRequested) {
