@@ -17,9 +17,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class Broker {
     private final Endpoint endpoint;
-    private volatile ClientCollection<InetSocketAddress> clients;
+    private final ClientCollection<InetSocketAddress> clients;
     private volatile Integer currentId;
     private volatile static boolean stopRequested = false;
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
     public Broker(int port) {
         endpoint = new Endpoint(port);
@@ -29,8 +30,6 @@ public class Broker {
 
     public class BrokerTask implements Runnable {
         private final Message message;
-        // TODO also move lock to broker, because only one thread will access it?
-        ReadWriteLock lock = new ReentrantReadWriteLock();
 
         public BrokerTask(Message message) {
             this.message = message;
@@ -51,41 +50,44 @@ public class Broker {
                 handoffFish(sender, payload);
             }
         }
+    }
 
-        // TODO move these methods to broker? Now synchronized doesn't really make sense,
-        // because only one thread will access this object of BrokerTask. Synchronized keyword is used for objects
-        // that are accessed by multiple threads.
-        private synchronized void register(InetSocketAddress sender) {
-            String id = "tank " + currentId;
-            currentId++;
-            // TODO write lock here maybe?
-            clients.add(id, sender);
-            endpoint.send(sender, new RegisterResponse(id));
+    private synchronized void register(InetSocketAddress sender) {
+        String id = "tank " + currentId;
+        currentId++;
+
+        lock.writeLock().lock();
+
+        clients.add(id, sender);
+
+        lock.writeLock().unlock();
+        endpoint.send(sender, new RegisterResponse(id));
+    }
+
+    private void deregister(InetSocketAddress sender) {
+        lock.writeLock().lock();
+
+        clients.remove(clients.indexOf(sender));
+
+        lock.writeLock().unlock();
+    }
+
+    private void handoffFish(InetSocketAddress sender, Serializable payload) {
+        HandoffRequest hor = (HandoffRequest) payload;
+        FishModel fish = hor.getFish();
+        InetSocketAddress target = null;
+
+        lock.readLock().lock();
+
+        if (fish.getDirection().equals(Direction.LEFT)) {
+            target = clients.getLeftNeighorOf(clients.indexOf(sender));
+        } else {
+            target = clients.getRightNeighorOf(clients.indexOf(sender));
         }
 
-        private synchronized void deregister(InetSocketAddress sender) {
-            // TODO write lock here maybe?
-            clients.remove(clients.indexOf(sender));
-        }
+        lock.readLock().unlock();
 
-        private void handoffFish(InetSocketAddress sender, Serializable payload) {
-            HandoffRequest hor = (HandoffRequest) payload;
-            FishModel fish = hor.getFish();
-            InetSocketAddress target = null;
-
-            // TODO where is the write lock?
-            lock.readLock().lock();
-
-            if (fish.getDirection().equals(Direction.LEFT)) {
-                target = clients.getLeftNeighorOf(clients.indexOf(sender));
-            } else {
-                target = clients.getRightNeighorOf(clients.indexOf(sender));
-            }
-
-            lock.readLock().unlock();
-
-            endpoint.send(target, hor);
-        }
+        endpoint.send(target, hor);
     }
 
     public static void main(String[] args) {
@@ -103,8 +105,8 @@ public class Broker {
     }
 
     public void broker() {
-        // TODO use constant thread pool
-        ExecutorService executor = Executors.newCachedThreadPool();
+        // POOL_SIZE = 4 / 0.7 = 6
+        ExecutorService executor = Executors.newFixedThreadPool(6);
 
         while (!stopRequested) {
             Message message = this.endpoint.blockingReceive();
