@@ -1,11 +1,7 @@
 package aqua.blatt1.client;
 
 import java.net.InetSocketAddress;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.Observable;
-import java.util.Random;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -26,10 +22,28 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 	protected final ClientCommunicator.ClientForwarder forwarder;
 	protected InetSocketAddress rightNeighbor;
 	protected InetSocketAddress leftNeighbor;
+	protected boolean token = false;
+	protected Timer timer = new Timer();
+
 
 	public TankModel(ClientCommunicator.ClientForwarder forwarder) {
 		this.fishies = Collections.newSetFromMap(new ConcurrentHashMap<FishModel, Boolean>());
 		this.forwarder = forwarder;
+	}
+
+	public void receiveToken() {
+		token = true;
+		timer.schedule(new TimerTask() {
+			@Override
+			public void run() {
+				token = false;
+				forwarder.handOffToken(rightNeighbor);
+			}
+		}, 2);
+	}
+
+	public boolean hasToken() {
+		return token;
 	}
 
 	synchronized void onRegistration(String id) {

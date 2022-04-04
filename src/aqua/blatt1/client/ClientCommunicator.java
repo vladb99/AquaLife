@@ -34,6 +34,10 @@ public class ClientCommunicator {
 		public void handOff(FishModel fish, InetSocketAddress neighbor) {
 			endpoint.send(neighbor, new HandoffRequest(fish));
 		}
+
+		public void handOffToken(InetSocketAddress neighbor) {
+			endpoint.send(neighbor, new Token());
+		}
 	}
 
 	public class ClientReceiver extends Thread {
