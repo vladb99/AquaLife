@@ -64,6 +64,10 @@ public class ClientCommunicator {
 					tankModel.rightNeighbor = nu.getRightNeighbor();
 				}
 
+				if (msg.getPayload() instanceof Token) {
+					tankModel.receiveToken();
+				}
+
 			}
 			System.out.println("Receiver stopped.");
 		}

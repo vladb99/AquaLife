@@ -37,9 +37,9 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 			@Override
 			public void run() {
 				token = false;
-				forwarder.handOffToken(rightNeighbor);
+				forwarder.handOffToken(leftNeighbor);
 			}
-		}, 2);
+		}, 2000);
 	}
 
 	public boolean hasToken() {
@@ -86,12 +86,14 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 
 			fish.update();
 
-			if (fish.hitsEdge()) {
+			if (fish.hitsEdge() && hasToken()) {
 				if (fish.getDirection().equals(Direction.LEFT)) {
 					forwarder.handOff(fish, leftNeighbor);
 				} else {
 					forwarder.handOff(fish, rightNeighbor);
 				}
+			} else if (fish.hitsEdge()) {
+				fish.reverse();
 			}
 
 			if (fish.disappears())

@@ -68,6 +68,10 @@ public class Broker {
 
         InetSocketAddress leftLeftNeighbor = clients.getLeftNeighorOf(clients.indexOf(leftNeighbor));
         InetSocketAddress rightRightNeighbor = clients.getRightNeighorOf(clients.indexOf(rightNeighbor));
+
+        if (clients.size() == 1) {
+            endpoint.send(sender, new Token());
+        }
         lock.readLock().unlock();
 
         endpoint.send(sender, new NeighborUpdate(leftNeighbor, rightNeighbor));
