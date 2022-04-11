@@ -61,15 +61,42 @@ public class Broker {
         clients.add(id, sender);
 
         lock.writeLock().unlock();
+
+        lock.readLock().lock();
+        InetSocketAddress leftNeighbor = clients.getLeftNeighorOf(clients.indexOf(id));
+        InetSocketAddress rightNeighbor = clients.getRightNeighorOf(clients.indexOf(id));
+
+        InetSocketAddress leftLeftNeighbor = clients.getLeftNeighorOf(clients.indexOf(leftNeighbor));
+        InetSocketAddress rightRightNeighbor = clients.getRightNeighorOf(clients.indexOf(rightNeighbor));
+
+        if (clients.size() == 1) {
+            endpoint.send(sender, new Token());
+        }
+        lock.readLock().unlock();
+
+        endpoint.send(sender, new NeighborUpdate(leftNeighbor, rightNeighbor));
         endpoint.send(sender, new RegisterResponse(id));
+        endpoint.send(leftNeighbor, new NeighborUpdate(leftLeftNeighbor, sender));
+        endpoint.send(rightNeighbor, new NeighborUpdate(sender, rightRightNeighbor));
     }
 
     private void deregister(InetSocketAddress sender) {
+        lock.readLock().lock();
+        InetSocketAddress leftNeighbor = clients.getLeftNeighorOf(clients.indexOf(sender));
+        InetSocketAddress rightNeighbor = clients.getRightNeighorOf(clients.indexOf(sender));
+
+        InetSocketAddress leftLeftNeighbor = clients.getLeftNeighorOf(clients.indexOf(leftNeighbor));
+        InetSocketAddress rightRightNeighbor = clients.getRightNeighorOf(clients.indexOf(rightNeighbor));
+        lock.readLock().unlock();
+
         lock.writeLock().lock();
 
         clients.remove(clients.indexOf(sender));
 
         lock.writeLock().unlock();
+
+        endpoint.send(leftNeighbor, new NeighborUpdate(leftLeftNeighbor, rightNeighbor));
+        endpoint.send(rightNeighbor, new NeighborUpdate(leftNeighbor, rightRightNeighbor));
     }
 
     private void handoffFish(InetSocketAddress sender, Serializable payload) {

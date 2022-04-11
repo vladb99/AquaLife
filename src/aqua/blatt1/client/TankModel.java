@@ -1,15 +1,14 @@
 package aqua.blatt1.client;
 
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.Observable;
-import java.util.Random;
-import java.util.Set;
+import java.net.InetSocketAddress;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 import aqua.blatt1.common.Direction;
 import aqua.blatt1.common.FishModel;
+import aqua.blatt1.common.Properties;
+import aqua.blatt1.common.msgtypes.HandoffRequest;
 
 public class TankModel extends Observable implements Iterable<FishModel> {
 
@@ -21,10 +20,30 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 	protected final Set<FishModel> fishies;
 	protected int fishCounter = 0;
 	protected final ClientCommunicator.ClientForwarder forwarder;
+	protected InetSocketAddress rightNeighbor;
+	protected InetSocketAddress leftNeighbor;
+	protected boolean token = false;
+	protected Timer timer = new Timer();
+
 
 	public TankModel(ClientCommunicator.ClientForwarder forwarder) {
 		this.fishies = Collections.newSetFromMap(new ConcurrentHashMap<FishModel, Boolean>());
 		this.forwarder = forwarder;
+	}
+
+	public void receiveToken() {
+		token = true;
+		timer.schedule(new TimerTask() {
+			@Override
+			public void run() {
+				token = false;
+				forwarder.handOffToken(leftNeighbor);
+			}
+		}, 2000);
+	}
+
+	public boolean hasToken() {
+		return token;
 	}
 
 	synchronized void onRegistration(String id) {
@@ -67,8 +86,15 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 
 			fish.update();
 
-			if (fish.hitsEdge())
-				forwarder.handOff(fish);
+			if (fish.hitsEdge() && hasToken()) {
+				if (fish.getDirection().equals(Direction.LEFT)) {
+					forwarder.handOff(fish, leftNeighbor);
+				} else {
+					forwarder.handOff(fish, rightNeighbor);
+				}
+			} else if (fish.hitsEdge()) {
+				fish.reverse();
+			}
 
 			if (fish.disappears())
 				it.remove();
@@ -95,6 +121,9 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 	}
 
 	public synchronized void finish() {
+		if(token){
+			forwarder.handOffToken(leftNeighbor);
+		}
 		forwarder.deregister(id);
 	}
 
