@@ -7,8 +7,8 @@ import java.util.concurrent.TimeUnit;
 
 import aqua.blatt1.common.Direction;
 import aqua.blatt1.common.FishModel;
-import aqua.blatt1.common.Properties;
-import aqua.blatt1.common.msgtypes.HandoffRequest;
+import aqua.blatt1.common.RecordingMode;
+import aqua.blatt1.common.msgtypes.SnapshotToken;
 
 public class TankModel extends Observable implements Iterable<FishModel> {
 
@@ -25,6 +25,12 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 	protected boolean token = false;
 	protected Timer timer = new Timer();
 
+	//SNAPSHOT
+	protected RecordingMode recordingMode = RecordingMode.IDLE;
+	protected int localState = 0;
+	protected boolean isInitiator = false;
+	protected boolean hasSnapshotToken = false;
+	protected boolean localSnapshotDone = false;
 
 	public TankModel(ClientCommunicator.ClientForwarder forwarder) {
 		this.fishies = Collections.newSetFromMap(new ConcurrentHashMap<FishModel, Boolean>());
@@ -46,6 +52,14 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 		return token;
 	}
 
+	public void initiateSnapshot(boolean isInitiatior){
+		this.isInitiator = isInitiatior;
+		localState = fishCounter;
+		recordingMode = RecordingMode.BOTH;
+		forwarder.sendSnapshotMarker(leftNeighbor);
+		forwarder.sendSnapshotMarker(rightNeighbor);
+	}
+
 	synchronized void onRegistration(String id) {
 		this.id = id;
 		newFish(WIDTH - FishModel.getXSize(), rand.nextInt(HEIGHT - FishModel.getYSize()));
@@ -63,7 +77,39 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 		}
 	}
 
+	public void receiveSnapshotMarker(InetSocketAddress sender){
+		if(recordingMode == RecordingMode.IDLE){//Zeichnet gerade nicht auf
+			initiateSnapshot(false);
+		}else if(recordingMode == RecordingMode.LEFT || recordingMode == RecordingMode.RIGHT){
+			recordingMode = RecordingMode.IDLE;
+
+			if(isInitiator){
+				SnapshotToken token = new SnapshotToken(localState);
+				forwarder.sendSnapshotToken(leftNeighbor, token);
+			}else{
+				localSnapshotDone = true;
+				if(hasSnapshotToken){
+					token.increaseFishies(localState);
+					forwarder.sendSnapshotToken(leftNeighbor, token);
+					hasSnapshotToken = false;
+				}
+			}
+		}else if(sender.equals(leftNeighbor) && recordingMode == RecordingMode.BOTH){
+			recordingMode = RecordingMode.RIGHT;
+		}else if(sender.equals(rightNeighbor) && recordingMode == RecordingMode.BOTH){
+			recordingMode = RecordingMode.LEFT;
+		}
+	}
+
 	synchronized void receiveFish(FishModel fish) {
+		if(recordingMode == RecordingMode.LEFT && fish.getDirection() == Direction.RIGHT){
+			localState++;
+		}else if(recordingMode == RecordingMode.RIGHT && fish.getDirection() == Direction.LEFT){
+			localState++;
+		}else if(recordingMode == RecordingMode.BOTH){
+			localState++;
+		}
+
 		fish.setToStart();
 		fishies.add(fish);
 	}
@@ -127,4 +173,12 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 		forwarder.deregister(id);
 	}
 
+	public void receiveSnapshotToken(SnapshotToken token) {
+		hasSnapshotToken = true;
+		if(localSnapshotDone){
+			token.increaseFishies(localState);
+			forwarder.sendSnapshotToken(leftNeighbor, token);
+			hasSnapshotToken = false;
+		}
+	}
 }
