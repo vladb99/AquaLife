@@ -1,5 +1,7 @@
 package aqua.blatt1.client;
 
+import aqua.blatt1.common.RecordingMode;
+
 import java.awt.Component;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -18,6 +20,6 @@ public class SnapshotController implements ActionListener {
 	@Override
 	public void actionPerformed(ActionEvent e) {
 		JOptionPane.showMessageDialog(parent, "Start snapshot.");
-		tankModel.initiateSnapshot(true);
+		tankModel.initiateSnapshot(true, RecordingMode.BOTH);
 	}
 }

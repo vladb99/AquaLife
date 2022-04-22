@@ -31,6 +31,8 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 	protected boolean isInitiator = false;
 	protected boolean hasSnapshotToken = false;
 	protected boolean localSnapshotDone = false;
+	protected boolean globalSnapshotDone = false;
+	protected SnapshotToken snapshotToken;
 
 	public TankModel(ClientCommunicator.ClientForwarder forwarder) {
 		this.fishies = Collections.newSetFromMap(new ConcurrentHashMap<FishModel, Boolean>());
@@ -52,10 +54,16 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 		return token;
 	}
 
-	public void initiateSnapshot(boolean isInitiatior){
+	public void initiateSnapshot(boolean isInitiatior, RecordingMode mode) {
 		this.isInitiator = isInitiatior;
+		// Speichere lokalen Zustand
 		localState = fishCounter;
-		recordingMode = RecordingMode.BOTH;
+
+		// Initiator startet Aufzeichungsmodus für alle Eingangskanäle (BOTH)
+		// Rest startet Aufzeichungsmodus für alle anderen Eingangskanäle
+		recordingMode = mode;
+
+		// sende Markierungen in allen Ausgangskanäle
 		forwarder.sendSnapshotMarker(leftNeighbor);
 		forwarder.sendSnapshotMarker(rightNeighbor);
 	}
@@ -77,27 +85,45 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 		}
 	}
 
+	// Skript5 17-18
 	public void receiveSnapshotMarker(InetSocketAddress sender){
-		if(recordingMode == RecordingMode.IDLE){//Zeichnet gerade nicht auf
-			initiateSnapshot(false);
-		}else if(recordingMode == RecordingMode.LEFT || recordingMode == RecordingMode.RIGHT){
+		// falls es sich nicht im Aufzeichungsmodus befinden
+		if(recordingMode == RecordingMode.IDLE) {
+			// starte Aufzeichnungsmodus für alle anderen Eingangskanäle
+			if(sender.equals(leftNeighbor)){
+				initiateSnapshot(false, RecordingMode.RIGHT);
+			} else {
+				initiateSnapshot(false, RecordingMode.LEFT);
+			}
+		} else if(recordingMode == RecordingMode.LEFT || recordingMode == RecordingMode.RIGHT) {
 			recordingMode = RecordingMode.IDLE;
 
-			if(isInitiator){
+			if(isInitiator) {
 				SnapshotToken token = new SnapshotToken(localState);
 				forwarder.sendSnapshotToken(leftNeighbor, token);
-			}else{
+			} else {
 				localSnapshotDone = true;
 				if(hasSnapshotToken){
-					token.increaseFishies(localState);
-					forwarder.sendSnapshotToken(leftNeighbor, token);
+
+
+					System.out.println("Received snapshot marker - idle - hasSnapshotToken");
+
+					snapshotToken.increaseFishies(localState);
+					forwarder.sendSnapshotToken(leftNeighbor, snapshotToken);
 					hasSnapshotToken = false;
+					localSnapshotDone = false;
 				}
+
+
 			}
-		}else if(sender.equals(leftNeighbor) && recordingMode == RecordingMode.BOTH){
+		}else if(sender.equals(leftNeighbor) && recordingMode == RecordingMode.BOTH) {
+			System.out.println("Received snapshot marker - from left");
 			recordingMode = RecordingMode.RIGHT;
-		}else if(sender.equals(rightNeighbor) && recordingMode == RecordingMode.BOTH){
+		}else if(sender.equals(rightNeighbor) && recordingMode == RecordingMode.BOTH) {
+			System.out.println("Received snapshot marker - from right");
 			recordingMode = RecordingMode.LEFT;
+		}else{
+			System.out.println("THIS IS THE ELSE CASE");
 		}
 	}
 
@@ -174,11 +200,24 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 	}
 
 	public void receiveSnapshotToken(SnapshotToken token) {
-		hasSnapshotToken = true;
-		if(localSnapshotDone){
-			token.increaseFishies(localState);
-			forwarder.sendSnapshotToken(leftNeighbor, token);
-			hasSnapshotToken = false;
+		if (isInitiator) {
+			System.out.println("Received snapshot token - global snapshot done");
+
+			globalSnapshotDone = true;
+			snapshotToken = token;
+		} else {
+			System.out.println("Received snapshot token");
+
+			hasSnapshotToken = true;
+			snapshotToken = token;
+			if(localSnapshotDone) {
+				System.out.println("Received snapshot token - local snapshot done");
+
+				token.increaseFishies(localState);
+				forwarder.sendSnapshotToken(leftNeighbor, token);
+				hasSnapshotToken = false;
+				localSnapshotDone = false;
+			}
 		}
 	}
 }
