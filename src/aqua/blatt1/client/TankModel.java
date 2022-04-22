@@ -103,27 +103,18 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 				forwarder.sendSnapshotToken(leftNeighbor, token);
 			} else {
 				localSnapshotDone = true;
+				// Hatte Token schon aber war nicht fertig mit dem Snapshot. Jetzt bin ich fertig mit Snapshot, dann schicke ich es weiter.
 				if(hasSnapshotToken){
-
-
-					System.out.println("Received snapshot marker - idle - hasSnapshotToken");
-
 					snapshotToken.increaseFishies(localState);
 					forwarder.sendSnapshotToken(leftNeighbor, snapshotToken);
 					hasSnapshotToken = false;
 					localSnapshotDone = false;
 				}
-
-
 			}
-		}else if(sender.equals(leftNeighbor) && recordingMode == RecordingMode.BOTH) {
-			System.out.println("Received snapshot marker - from left");
+		} else if(sender.equals(leftNeighbor) && recordingMode == RecordingMode.BOTH) {
 			recordingMode = RecordingMode.RIGHT;
-		}else if(sender.equals(rightNeighbor) && recordingMode == RecordingMode.BOTH) {
-			System.out.println("Received snapshot marker - from right");
+		} else if(sender.equals(rightNeighbor) && recordingMode == RecordingMode.BOTH) {
 			recordingMode = RecordingMode.LEFT;
-		}else{
-			System.out.println("THIS IS THE ELSE CASE");
 		}
 	}
 
@@ -201,18 +192,14 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 
 	public void receiveSnapshotToken(SnapshotToken token) {
 		if (isInitiator) {
-			System.out.println("Received snapshot token - global snapshot done");
-
+			// Token ist zurück gekommen. Zeige Anzahl an Fishies
 			globalSnapshotDone = true;
 			snapshotToken = token;
 		} else {
-			System.out.println("Received snapshot token");
-
 			hasSnapshotToken = true;
 			snapshotToken = token;
+			// Hab Token und bin fertig mit dem Snapshot, dann gleich schicken
 			if(localSnapshotDone) {
-				System.out.println("Received snapshot token - local snapshot done");
-
 				token.increaseFishies(localState);
 				forwarder.sendSnapshotToken(leftNeighbor, token);
 				hasSnapshotToken = false;
