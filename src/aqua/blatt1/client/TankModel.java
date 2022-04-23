@@ -27,6 +27,7 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 
 	//SNAPSHOT
 	protected RecordingMode recordingMode = RecordingMode.IDLE;
+	// TODO do not use fishCounter, because it only tracks the fishes that were created by this client
 	protected int localState = 0;
 	protected boolean isInitiator = false;
 	protected boolean hasSnapshotToken = false;
