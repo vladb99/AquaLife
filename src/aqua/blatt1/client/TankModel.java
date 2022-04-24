@@ -34,6 +34,7 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 	protected boolean localSnapshotDone = false;
 	protected boolean globalSnapshotDone = false;
 	protected SnapshotToken snapshotToken;
+	protected int cntFishies = 0;
 
 	public TankModel(ClientCommunicator.ClientForwarder forwarder) {
 		this.fishies = Collections.newSetFromMap(new ConcurrentHashMap<FishModel, Boolean>());
@@ -58,7 +59,7 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 	public void initiateSnapshot(boolean isInitiatior, RecordingMode mode) {
 		this.isInitiator = isInitiatior;
 		// Speichere lokalen Zustand
-		localState = fishCounter;
+		localState = cntFishies;
 
 		// Initiator startet Aufzeichungsmodus für alle Eingangskanäle (BOTH)
 		// Rest startet Aufzeichungsmodus für alle anderen Eingangskanäle
@@ -79,6 +80,7 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 			x = x > WIDTH - FishModel.getXSize() - 1 ? WIDTH - FishModel.getXSize() - 1 : x;
 			y = y > HEIGHT - FishModel.getYSize() ? HEIGHT - FishModel.getYSize() : y;
 
+			cntFishies++;
 			FishModel fish = new FishModel("fish" + (++fishCounter) + "@" + getId(), x, y,
 					rand.nextBoolean() ? Direction.LEFT : Direction.RIGHT);
 
@@ -120,6 +122,7 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 	}
 
 	synchronized void receiveFish(FishModel fish) {
+		cntFishies++;
 		if(recordingMode == RecordingMode.LEFT && fish.getDirection() == Direction.RIGHT){
 			localState++;
 		}else if(recordingMode == RecordingMode.RIGHT && fish.getDirection() == Direction.LEFT){
@@ -151,6 +154,7 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 			fish.update();
 
 			if (fish.hitsEdge() && hasToken()) {
+				cntFishies--;
 				if (fish.getDirection().equals(Direction.LEFT)) {
 					forwarder.handOff(fish, leftNeighbor);
 				} else {
