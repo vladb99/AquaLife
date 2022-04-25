@@ -153,7 +153,6 @@ public class TankModel extends Observable implements Iterable<FishModel> {
         if (fish.getTankId().equals(id)) {
             homeAgent.put(fish.getId(), null);
         } else {//Fisch schwimmt in einen anderen Tank - Fall b
-            System.out.println("TRIGGER sendNameResolutionRequest");
             forwarder.sendNameResolutionRequest(new NameResolutionRequest(fish.getTankId(), fish.getId()));
         }
         fishies.add(fish);
@@ -177,7 +176,7 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 
             fish.update();
 
-            if (fish.hitsEdge()) {// && hasToken()
+            if (fish.hitsEdge() && hasToken()) {
                 cntFishies--;
                 if (fish.getDirection().equals(Direction.LEFT)) {
                     //Vorwärtsreferenzen
