@@ -24,6 +24,7 @@ public class Broker {
     private volatile static boolean stopRequested = false;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
+    //Heimatgestützt
     //Namespace - TankId zu InetSocketAddress
     Map<String, InetSocketAddress> namespace = new HashMap<>();
 
@@ -54,7 +55,6 @@ public class Broker {
             if (payload instanceof HandoffRequest) {
                 handoffFish(sender, payload);
             }
-
             if (payload instanceof NameResolutionRequest e) {
                 handleNameResolutionRequest(sender, e);
             }
@@ -62,7 +62,9 @@ public class Broker {
     }
 
     private void handleNameResolutionRequest(InetSocketAddress sender, NameResolutionRequest nrr) {
+        lock.readLock().lock();
         endpoint.send(sender, new NameResolutionResponse(namespace.get(nrr.getTankId()), nrr.getRequestId()));
+        lock.readLock().unlock();
     }
 
     private synchronized void register(InetSocketAddress sender) {

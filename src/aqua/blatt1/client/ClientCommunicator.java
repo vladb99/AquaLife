@@ -56,8 +56,8 @@ public class ClientCommunicator {
 			endpoint.send(broker, resolutionRequest);
 		}
 
-		public void sendLocationUpdate(LocationUpdate locationUpdate) {
-			endpoint.send(broker, locationUpdate);
+		public void sendLocationUpdate(InetSocketAddress homeTank, LocationUpdate locationUpdate) {
+			endpoint.send(homeTank, locationUpdate);
 		}
 	}
 
@@ -97,8 +97,12 @@ public class ClientCommunicator {
 					tankModel.receiveSnapshotToken((SnapshotToken) msg.getPayload());
 				}
 
-				if(msg.getPayload() instanceof LocationRequest){
-					tankModel.locateFishGlobally(((LocationRequest) msg.getPayload()).getFishId());
+				if(msg.getPayload() instanceof LocationRequest lr){
+					//Vorwärtsreferenzen
+					//tankModel.locateFishGlobally(((LocationRequest) msg.getPayload()).getFishId());
+
+					//Heimatgestützt
+					tankModel.locateFishLocally(lr.getFishId());
 				}
 
 				if(msg.getPayload() instanceof NameResolutionResponse nrr){

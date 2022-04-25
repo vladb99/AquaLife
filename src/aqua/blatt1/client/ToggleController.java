@@ -18,6 +18,10 @@ public class ToggleController implements ActionListener {
 
     @Override
     public void actionPerformed(ActionEvent e) {
-        tankModel.locateFishGlobally(this.fishId);
+        //Vorwärtsreferenzen
+        //tankModel.locateFishGlobally(this.fishId);
+
+        //Heimatgestützt
+        tankModel.locateFishGloballyHomeAgent(this.fishId);
     }
 }
