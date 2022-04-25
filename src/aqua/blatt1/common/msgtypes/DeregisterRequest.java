@@ -4,7 +4,7 @@ import java.io.Serializable;
 
 @SuppressWarnings("serial")
 public final class DeregisterRequest implements Serializable {
-	private final String id;
+	private final String id;//tank id
 
 	public DeregisterRequest(String id) {
 		this.id = id;

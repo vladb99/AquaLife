@@ -1,10 +1,9 @@
 package aqua.blatt1.client;
 
-import java.awt.Component;
+import javax.swing.*;
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-
-import javax.swing.JOptionPane;
 
 public class NotImplementedYetController implements ActionListener {
 	private final Component parent;
@@ -15,6 +14,6 @@ public class NotImplementedYetController implements ActionListener {
 
 	@Override
 	public void actionPerformed(ActionEvent e) {
-		JOptionPane.showMessageDialog(parent, "Functionality not implemented yet.");
+		JOptionPane.showMessageDialog(parent, "Not implemented yet.");
 	}
 }

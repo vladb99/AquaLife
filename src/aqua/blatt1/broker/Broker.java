@@ -10,6 +10,8 @@ import messaging.Message;
 import javax.swing.*;
 import java.io.Serializable;
 import java.net.InetSocketAddress;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -22,9 +24,13 @@ public class Broker {
     private volatile static boolean stopRequested = false;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
+    //Heimatgestützt
+    //Namespace - TankId zu InetSocketAddress
+    Map<String, InetSocketAddress> namespace = new HashMap<>();
+
     public Broker(int port) {
         endpoint = new Endpoint(port);
-        clients = new ClientCollection<InetSocketAddress>();
+        clients = new ClientCollection<>();
         currentId = 0;
     }
 
@@ -43,13 +49,22 @@ public class Broker {
             if (payload instanceof RegisterRequest) {
                 register(sender);
             }
-            if (payload instanceof DeregisterRequest) {
-                deregister(sender);
+            if (payload instanceof DeregisterRequest dr) {
+                deregister(sender, dr);
             }
             if (payload instanceof HandoffRequest) {
                 handoffFish(sender, payload);
             }
+            if (payload instanceof NameResolutionRequest e) {
+                handleNameResolutionRequest(sender, e);
+            }
         }
+    }
+
+    private void handleNameResolutionRequest(InetSocketAddress sender, NameResolutionRequest nrr) {
+        lock.readLock().lock();
+        endpoint.send(sender, new NameResolutionResponse(namespace.get(nrr.getTankId()), nrr.getRequestId()));
+        lock.readLock().unlock();
     }
 
     private synchronized void register(InetSocketAddress sender) {
@@ -59,6 +74,7 @@ public class Broker {
         lock.writeLock().lock();
 
         clients.add(id, sender);
+        namespace.put(id, sender);
 
         lock.writeLock().unlock();
 
@@ -80,7 +96,7 @@ public class Broker {
         endpoint.send(rightNeighbor, new NeighborUpdate(sender, rightRightNeighbor));
     }
 
-    private void deregister(InetSocketAddress sender) {
+    private void deregister(InetSocketAddress sender, DeregisterRequest dr) {
         lock.readLock().lock();
         InetSocketAddress leftNeighbor = clients.getLeftNeighorOf(clients.indexOf(sender));
         InetSocketAddress rightNeighbor = clients.getRightNeighorOf(clients.indexOf(sender));
@@ -92,6 +108,7 @@ public class Broker {
         lock.writeLock().lock();
 
         clients.remove(clients.indexOf(sender));
+        namespace.remove(dr.getId());
 
         lock.writeLock().unlock();
 

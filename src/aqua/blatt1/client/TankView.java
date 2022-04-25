@@ -6,8 +6,7 @@ import java.awt.event.MouseEvent;
 import java.util.Observable;
 import java.util.Observer;
 
-import javax.swing.JPanel;
-import javax.swing.SwingUtilities;
+import javax.swing.*;
 
 import aqua.blatt1.common.FishModel;
 
@@ -64,6 +63,17 @@ public class TankView extends JPanel implements Observer {
 		if (tankModel.hasToken()) {
 			Graphics2D g2d = (Graphics2D) g;
 			drawBorders(g2d);
+		}
+
+		if (tankModel.globalSnapshotDone) {
+			Thread guiThread = new Thread(new Runnable() {
+				@Override
+				public void run() {
+					JOptionPane.showMessageDialog(null, tankModel.snapshotToken.getFishies() + " Fishies");
+				}
+			});
+			guiThread.start();
+			tankModel.globalSnapshotDone = false;
 		}
 	}
 
