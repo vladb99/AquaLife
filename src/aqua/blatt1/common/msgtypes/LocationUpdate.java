@@ -2,10 +2,10 @@ package aqua.blatt1.common.msgtypes;
 
 import java.io.Serializable;
 
-public class LocationRequest implements Serializable {
+public class LocationUpdate implements Serializable {
     private String fishId;
 
-    public LocationRequest(String fishId) {
+    public LocationUpdate(String fishId) {
         this.fishId = fishId;
     }
 

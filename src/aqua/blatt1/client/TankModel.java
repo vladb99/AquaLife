@@ -8,7 +8,7 @@ import java.util.concurrent.TimeUnit;
 import aqua.blatt1.common.Direction;
 import aqua.blatt1.common.FishModel;
 import aqua.blatt1.common.RecordingMode;
-import aqua.blatt1.common.msgtypes.SnapshotToken;
+import aqua.blatt1.common.msgtypes.*;
 
 public class TankModel extends Observable implements Iterable<FishModel> {
 
@@ -16,7 +16,7 @@ public class TankModel extends Observable implements Iterable<FishModel> {
     public static final int HEIGHT = 350;
     protected static final int MAX_FISHIES = 5;
     protected static final Random rand = new Random();
-    protected volatile String id;
+    protected volatile String id; //tank id
     protected final Set<FishModel> fishies;
     protected int fishCounter = 0;
     protected final ClientCommunicator.ClientForwarder forwarder;
@@ -37,6 +37,8 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 
     //Namensdienste
     Map<String, FishDirectionReference> fishDirectionReferenceMap = new HashMap<>();
+    //Namensdienste 2 - FishId - TankAddress
+    Map<String, InetSocketAddress> homeAgent = new HashMap<>();
 
     public TankModel(ClientCommunicator.ClientForwarder forwarder) {
         this.fishies = Collections.newSetFromMap(new ConcurrentHashMap<FishModel, Boolean>());
@@ -86,7 +88,10 @@ public class TankModel extends Observable implements Iterable<FishModel> {
             FishModel fish = new FishModel("fish" + (++fishCounter) + "@" + getId(), x, y,
                     rand.nextBoolean() ? Direction.LEFT : Direction.RIGHT);
 
+            //Namespace
             fishDirectionReferenceMap.put(fish.getId(), FishDirectionReference.HERE);
+            homeAgent.put(fish.getId(), null);
+
             fishies.add(fish);
         }
     }
@@ -135,7 +140,13 @@ public class TankModel extends Observable implements Iterable<FishModel> {
         }
 
         fish.setToStart();
-		fishDirectionReferenceMap.put(fish.getId(), FishDirectionReference.HERE);
+        fishDirectionReferenceMap.put(fish.getId(), FishDirectionReference.HERE);
+        //wenn fisch wieder in den eigenen Tank schwimmt - Aufgabenblatt Fall a
+        if (fish.getTankId().equals(id)) {
+            homeAgent.put(fish.getId(), null);
+        } else {//Fisch schwimmt in einen anderen Tank - Fall b
+            forwarder.sendNameResolutionRequest(new NameResolutionRequest(fish.getTankId(), fish.getId()));
+        }
         fishies.add(fish);
     }
 
@@ -160,10 +171,10 @@ public class TankModel extends Observable implements Iterable<FishModel> {
             if (fish.hitsEdge() && hasToken()) {
                 cntFishies--;
                 if (fish.getDirection().equals(Direction.LEFT)) {
-					fishDirectionReferenceMap.put(fish.getId(), FishDirectionReference.LEFT);
+                    fishDirectionReferenceMap.put(fish.getId(), FishDirectionReference.LEFT);
                     forwarder.handOff(fish, leftNeighbor);
                 } else {
-					fishDirectionReferenceMap.put(fish.getId(), FishDirectionReference.RIGHT);
+                    fishDirectionReferenceMap.put(fish.getId(), FishDirectionReference.RIGHT);
                     forwarder.handOff(fish, rightNeighbor);
                 }
             } else if (fish.hitsEdge()) {
@@ -220,22 +231,40 @@ public class TankModel extends Observable implements Iterable<FishModel> {
     }
 
     public void locateFishGlobally(String fishId) {
-		if(fishDirectionReferenceMap.get(fishId) == FishDirectionReference.HERE){
-			locateFishLocally(fishId);
-		}else if(fishDirectionReferenceMap.get(fishId) == FishDirectionReference.LEFT){
-			forwarder.sendLocationRequest(leftNeighbor, fishId);
-		}else{
-			forwarder.sendLocationRequest(rightNeighbor, fishId);
-		}
+        if (fishDirectionReferenceMap.get(fishId) == FishDirectionReference.HERE) {
+            locateFishLocally(fishId);
+        } else if (fishDirectionReferenceMap.get(fishId) == FishDirectionReference.LEFT) {
+            forwarder.sendLocationRequest(leftNeighbor, fishId);
+        } else {
+            forwarder.sendLocationRequest(rightNeighbor, fishId);
+        }
     }
 
-	private void locateFishLocally(String fishId) {
-		for (FishModel fish : fishies) {
-			if (fishId.equals(fish.getId())) {
-				fish.toggle();
-			}
-		}
-	}
+    public void locateFishGloballyHomeAgent(String fishId) {
+        if (fishDirectionReferenceMap.get(fishId) == FishDirectionReference.HERE) {
+            locateFishLocally(fishId);
+        } else if (fishDirectionReferenceMap.get(fishId) == FishDirectionReference.LEFT) {
+            forwarder.sendLocationRequest(leftNeighbor, fishId);
+        } else {
+            forwarder.sendLocationRequest(rightNeighbor, fishId);
+        }
+    }
+
+    private void locateFishLocally(String fishId) {
+        for (FishModel fish : fishies) {
+            if (fishId.equals(fish.getId())) {
+                fish.toggle();
+            }
+        }
+    }
+
+    public void receiveNameResolutionResponse(NameResolutionResponse nrr) {
+        forwarder.sendLocationUpdate(new LocationUpdate(nrr.getRequestId()));
+    }
+
+    public void updateFishLocation(LocationUpdate lu, InetSocketAddress sender) {
+        homeAgent.put(lu.getFishId(), sender);
+    }
 }
 
 enum FishDirectionReference {
