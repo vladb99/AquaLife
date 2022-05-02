@@ -10,8 +10,11 @@ import messaging.Message;
 import javax.swing.*;
 import java.io.Serializable;
 import java.net.InetSocketAddress;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -23,6 +26,8 @@ public class Broker {
     private volatile Integer currentId;
     private volatile static boolean stopRequested = false;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    private final int LEASE_TIME = 5000;
+    private java.util.Timer timer = new Timer();
 
     //Heimatgestützt
     //Namespace - TankId zu InetSocketAddress
@@ -50,7 +55,9 @@ public class Broker {
                 register(sender);
             }
             if (payload instanceof DeregisterRequest dr) {
-                deregister(sender, dr);
+                // TODO check with Dani
+                // deregister(sender, dr);
+                deregister(sender);
             }
             if (payload instanceof HandoffRequest) {
                 handoffFish(sender, payload);
@@ -68,12 +75,23 @@ public class Broker {
     }
 
     private synchronized void register(InetSocketAddress sender) {
+        lock.readLock().lock();
+        int index = clients.indexOf(sender);
+        if (index != -1) {
+            String id = clients.getIdOf(index);
+            clients.remove(index);
+            clients.add(id, sender, Instant.now());
+            lock.readLock().unlock();
+            return;
+        }
+        lock.readLock().unlock();
+
         String id = "tank " + currentId;
         currentId++;
 
         lock.writeLock().lock();
 
-        clients.add(id, sender);
+        clients.add(id, sender, Instant.now());
         namespace.put(id, sender);
 
         lock.writeLock().unlock();
@@ -91,12 +109,15 @@ public class Broker {
         lock.readLock().unlock();
 
         endpoint.send(sender, new NeighborUpdate(leftNeighbor, rightNeighbor));
-        endpoint.send(sender, new RegisterResponse(id));
+        // TODO check if is better to make it relative to number of registered clients
+        endpoint.send(sender, new RegisterResponse(id, LEASE_TIME));
         endpoint.send(leftNeighbor, new NeighborUpdate(leftLeftNeighbor, sender));
         endpoint.send(rightNeighbor, new NeighborUpdate(sender, rightRightNeighbor));
     }
 
-    private void deregister(InetSocketAddress sender, DeregisterRequest dr) {
+    // TODO check with Dani
+    // private void deregister(InetSocketAddress sender, DeregisterRequest dr) {
+    private void deregister(InetSocketAddress sender) {
         lock.readLock().lock();
         InetSocketAddress leftNeighbor = clients.getLeftNeighorOf(clients.indexOf(sender));
         InetSocketAddress rightNeighbor = clients.getRightNeighorOf(clients.indexOf(sender));
@@ -107,8 +128,9 @@ public class Broker {
 
         lock.writeLock().lock();
 
+        String id = clients.getIdOf(clients.indexOf(sender));
         clients.remove(clients.indexOf(sender));
-        namespace.remove(dr.getId());
+        namespace.remove(id);
 
         lock.writeLock().unlock();
 
@@ -149,6 +171,15 @@ public class Broker {
     }
 
     public void broker() {
+        // TODO fish change aquarium when client doesn't have the token
+        // TODO we also get a java.lang.IllegalArgumentException: unsupported address type error, when running normally
+        timer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                clients.getClients().stream().filter(client -> client.instant.isBefore(Instant.now().minusMillis(LEASE_TIME * 3)))
+                        .forEach(client -> deregister(client.client));
+            }
+        }, 5000, 15000);
         // POOL_SIZE = 4 / 0.7 = 6
         ExecutorService executor = Executors.newFixedThreadPool(6);
 

@@ -76,9 +76,16 @@ public class TankModel extends Observable implements Iterable<FishModel> {
         forwarder.sendSnapshotMarker(rightNeighbor);
     }
 
-    synchronized void onRegistration(String id) {
+    synchronized void onRegistration(String id, int leaseTime) {
         this.id = id;
         newFish(WIDTH - FishModel.getXSize(), rand.nextInt(HEIGHT - FishModel.getYSize()));
+
+        timer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                forwarder.register();
+            }
+        }, leaseTime);
     }
 
     public synchronized void newFish(int x, int y) {
@@ -256,10 +263,8 @@ public class TankModel extends Observable implements Iterable<FishModel> {
     //Heimatgestützt
     public void locateFishGloballyHomeAgent(String fishId) {
         if (homeAgent.get(fishId) == null) { //fisch ist momentan im eigenen Tank
-            System.out.println(homeAgent);
             locateFishLocally(fishId);
         } else {
-            System.out.println(homeAgent);
             forwarder.sendLocationRequest(homeAgent.get(fishId), fishId);
         }
     }

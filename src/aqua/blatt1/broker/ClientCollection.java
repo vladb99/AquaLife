@@ -1,5 +1,6 @@
 package aqua.blatt1.broker;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -9,13 +10,15 @@ import java.util.List;
  */
 
 public class ClientCollection<T> {
-	private class Client {
+	public class Client {
 		final String id;
 		final T client;
+		final Instant instant;
 
-		Client(String id, T client) {
+		Client(String id, T client, Instant instant) {
 			this.id = id;
 			this.client = client;
+			this.instant = instant;
 		}
 	}
 
@@ -25,8 +28,8 @@ public class ClientCollection<T> {
 		clients = new ArrayList<Client>();
 	}
 
-	public ClientCollection<T> add(String id, T client) {
-		clients.add(new Client(id, client));
+	public ClientCollection<T> add(String id, T client, Instant instant) {
+		clients.add(new Client(id, client, instant));
 		return this;
 	}
 
@@ -49,8 +52,16 @@ public class ClientCollection<T> {
 		return -1;
 	}
 
+	public String getIdOf(int index) {
+		return clients.get(index).id;
+	}
+
 	public T getClient(int index) {
 		return clients.get(index).client;
+	}
+
+	public List<Client> getClients() {
+		return clients;
 	}
 
 	public int size() {
