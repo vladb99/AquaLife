@@ -13,7 +13,7 @@ public class ClientCollection<T> {
 	public class Client {
 		final String id;
 		final T client;
-		final Instant instant;
+		Instant instant;
 
 		Client(String id, T client, Instant instant) {
 			this.id = id;
@@ -31,6 +31,10 @@ public class ClientCollection<T> {
 	public ClientCollection<T> add(String id, T client, Instant instant) {
 		clients.add(new Client(id, client, instant));
 		return this;
+	}
+
+	public void setInstant(String id, Instant instant) {
+		clients.get(indexOf(id)).instant = instant;
 	}
 
 	public ClientCollection<T> remove(int index) {

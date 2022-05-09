@@ -55,8 +55,6 @@ public class Broker {
                 register(sender);
             }
             if (payload instanceof DeregisterRequest dr) {
-                // TODO check with Dani
-                // deregister(sender, dr);
                 deregister(sender);
             }
             if (payload instanceof HandoffRequest) {
@@ -75,16 +73,15 @@ public class Broker {
     }
 
     private synchronized void register(InetSocketAddress sender) {
-        lock.readLock().lock();
+        lock.writeLock().lock();
         int index = clients.indexOf(sender);
         if (index != -1) {
             String id = clients.getIdOf(index);
-            clients.remove(index);
-            clients.add(id, sender, Instant.now());
-            lock.readLock().unlock();
+            clients.setInstant(id, Instant.now());
+            lock.writeLock().unlock();
             return;
         }
-        lock.readLock().unlock();
+        lock.writeLock().unlock();
 
         String id = "tank " + currentId;
         currentId++;
@@ -115,8 +112,6 @@ public class Broker {
         endpoint.send(rightNeighbor, new NeighborUpdate(sender, rightRightNeighbor));
     }
 
-    // TODO check with Dani
-    // private void deregister(InetSocketAddress sender, DeregisterRequest dr) {
     private void deregister(InetSocketAddress sender) {
         lock.readLock().lock();
         InetSocketAddress leftNeighbor = clients.getLeftNeighorOf(clients.indexOf(sender));
