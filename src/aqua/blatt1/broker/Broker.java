@@ -166,7 +166,6 @@ public class Broker {
     }
 
     public void broker() {
-        // TODO fish change aquarium when client doesn't have the token
         // TODO we also get a java.lang.IllegalArgumentException: unsupported address type error, when running normally
         timer.schedule(new TimerTask() {
             @Override

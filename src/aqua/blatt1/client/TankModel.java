@@ -230,6 +230,7 @@ public class TankModel extends Observable implements Iterable<FishModel> {
             forwarder.handOffToken(leftNeighbor);
         }
         forwarder.deregister(id);
+        //timer.cancel();
     }
 
     public void receiveSnapshotToken(SnapshotToken token) {
