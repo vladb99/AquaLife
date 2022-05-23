@@ -3,6 +3,7 @@ package aqua.blatt1.broker;
 import aqua.blatt1.common.Direction;
 import aqua.blatt1.common.FishModel;
 import aqua.blatt1.common.Properties;
+import aqua.blatt1.common.SecureEndpoint;
 import aqua.blatt1.common.msgtypes.*;
 import messaging.Endpoint;
 import messaging.Message;
@@ -21,7 +22,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class Broker {
-    private final Endpoint endpoint;
+    private final SecureEndpoint endpoint;
     private final ClientCollection<InetSocketAddress> clients;
     private volatile Integer currentId;
     private volatile static boolean stopRequested = false;
@@ -34,7 +35,7 @@ public class Broker {
     Map<String, InetSocketAddress> namespace = new HashMap<>();
 
     public Broker(int port) {
-        endpoint = new Endpoint(port);
+        endpoint = new SecureEndpoint(port);
         clients = new ClientCollection<>();
         currentId = 0;
     }
