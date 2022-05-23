@@ -105,7 +105,7 @@ public class Broker {
             endpoint.send(sender, new Token());
         }
         lock.readLock().unlock();
-
+        System.out.println("IS SENDER NULL?" + (sender == null));
         endpoint.send(sender, new NeighborUpdate(leftNeighbor, rightNeighbor));
         // TODO check if is better to make it relative to number of registered clients
         endpoint.send(sender, new RegisterResponse(id, LEASE_TIME));

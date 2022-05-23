@@ -1,24 +1,24 @@
 package aqua.blatt1.common;
 
+import aqua.blatt1.common.msgtypes.KeyExchangeMessage;
 import messaging.Endpoint;
 import messaging.Message;
 
 import javax.crypto.*;
-import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
-import java.io.IOException;
-import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.net.InetSocketAddress;
-import java.security.InvalidAlgorithmParameterException;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
+import java.security.*;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class SecureEndpoint {
     private Endpoint endpoint;
-    private SecretKeySpec keySpec;
     private Cipher decodeCipher;
-    private Cipher encodeCipher;
+    private PrivateKey privKey;
+    private PublicKey publicKey;
+    Map<InetSocketAddress, PublicKey> communicationPartner = new ConcurrentHashMap<>();
 
     public SecureEndpoint() {
         this.endpoint = new Endpoint();
@@ -29,32 +29,64 @@ public class SecureEndpoint {
     }
 
     {
-        this.keySpec = new SecretKeySpec(new String("CAFEBABECAFEBABE").getBytes(), "AES");
-
         try {
-            this.decodeCipher = Cipher.getInstance("AES");
-            decodeCipher.init(Cipher.DECRYPT_MODE, keySpec);
+            //Creating KeyPair generator object
+            KeyPairGenerator keyPairGen = KeyPairGenerator.getInstance("RSA");
+            //Initializing the KeyPairGenerator
+            keyPairGen.initialize(1024);
+            //Generate the pair of keys
+            KeyPair pair = keyPairGen.generateKeyPair();
+            //Getting the private key from the key pair
+            privKey = pair.getPrivate();
+            //Getting the public key from the key pair
+            publicKey = pair.getPublic();
 
-            this.encodeCipher = Cipher.getInstance("AES");
-            encodeCipher.init(Cipher.ENCRYPT_MODE, keySpec);
+            this.decodeCipher = Cipher.getInstance("RSA");
+            decodeCipher.init(Cipher.DECRYPT_MODE, privKey);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
+    private ReentrantLock reentrantLock = new ReentrantLock();
+
     public void send(InetSocketAddress receiver, Serializable payload) {
+        reentrantLock.lock();
+        System.out.println(payload);
         System.out.println("SEND");
+        if (!communicationPartner.containsKey(receiver)) {
+            endpoint.send(receiver, new KeyExchangeMessage(this.publicKey, true));
+            while (!communicationPartner.containsKey(receiver)) {
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
         try {
+            Cipher encodeCipher = Cipher.getInstance("RSA");
+            encodeCipher.init(Cipher.ENCRYPT_MODE, communicationPartner.get(receiver));
+            new SealedObject(payload, encodeCipher);
             endpoint.send(receiver, new SealedObject(payload, encodeCipher));
         } catch (Exception exception) {
             throw new RuntimeException(exception);
         }
+        reentrantLock.unlock();
     }
 
     public Message blockingReceive() {
         System.out.println("blockingReceive");
-        Message message = endpoint.blockingReceive();
-
+        Message message = null;
+        while (message == null || message.getPayload() instanceof KeyExchangeMessage) {
+            message = endpoint.blockingReceive();
+            if (message.getPayload() instanceof KeyExchangeMessage kem) {
+                communicationPartner.put(message.getSender(), kem.getPublicKey());
+                if (kem.getRespond()) {
+                    endpoint.send(message.getSender(), new KeyExchangeMessage(this.publicKey, false));
+                }
+            }
+        }
         return decrypt(message);
     }
 
@@ -66,47 +98,12 @@ public class SecureEndpoint {
     }
 
     private Message decrypt(Message message) {
-        SealedObject sealedObject;
         try {
-            //sealedObject = new SealedObject(message.getPayload(), decodeCipher);
-            System.out.println(message.getPayload());
             SealedObject so = (SealedObject) message.getPayload();
-
-            Message encryptMessage = new Message((Serializable) so.getObject(decodeCipher), message.getSender());
-
-            System.out.println(encryptMessage.getPayload());
-
-            return encryptMessage;
+            return new Message((Serializable) so.getObject(decodeCipher), message.getSender());
         } catch (Exception e) {
             e.printStackTrace();
             return null;
         }
     }
-
-
-
-
-    public static SealedObject encryptObject(String algorithm, Serializable object,
-                                             SecretKey key, IvParameterSpec iv) throws NoSuchPaddingException,
-            NoSuchAlgorithmException, InvalidAlgorithmParameterException,
-            InvalidKeyException, IOException, IllegalBlockSizeException {
-
-        Cipher cipher = Cipher.getInstance(algorithm);
-        cipher.init(Cipher.ENCRYPT_MODE, key, iv);
-        SealedObject sealedObject = new SealedObject(object, cipher);
-        return sealedObject;
-    }
-
-    public static Serializable decryptObject(String algorithm, SealedObject sealedObject,
-                                             SecretKey key, IvParameterSpec iv) throws NoSuchPaddingException,
-            NoSuchAlgorithmException, InvalidAlgorithmParameterException, InvalidKeyException,
-            ClassNotFoundException, BadPaddingException, IllegalBlockSizeException,
-            IOException {
-
-        Cipher cipher = Cipher.getInstance(algorithm);
-        cipher.init(Cipher.DECRYPT_MODE, key, iv);
-        Serializable unsealObject = (Serializable) sealedObject.getObject(cipher);
-        return unsealObject;
-    }
-
 }
