@@ -1,6 +1,8 @@
 package aqua.blatt1.common;
 
+import aqua.blatt1.common.msgtypes.Blank;
 import aqua.blatt1.common.msgtypes.KeyExchangeMessage;
+import aqua.blatt1.common.msgtypes.RegisterResponse;
 import messaging.Endpoint;
 import messaging.Message;
 
@@ -8,17 +10,22 @@ import javax.crypto.*;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.Serializable;
 import java.net.InetSocketAddress;
-import java.security.*;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock;
 
 public class SecureEndpoint {
     private Endpoint endpoint;
     private Cipher decodeCipher;
-    private PrivateKey privKey;
+
+    Map<InetSocketAddress, PublicKey> communicationPartner = new HashMap<>();
+    private PrivateKey privateKey;
     private PublicKey publicKey;
-    Map<InetSocketAddress, PublicKey> communicationPartner = new ConcurrentHashMap<>();
+
+
 
     public SecureEndpoint() {
         this.endpoint = new Endpoint();
@@ -29,81 +36,80 @@ public class SecureEndpoint {
     }
 
     {
+        //this.keySpec = new SecretKeySpec(new String("CAFEBABECAFEBABE").getBytes(), "AES");
+
+        KeyPairGenerator keyPairGen = null;
         try {
-            //Creating KeyPair generator object
-            KeyPairGenerator keyPairGen = KeyPairGenerator.getInstance("RSA");
-            //Initializing the KeyPairGenerator
+            keyPairGen = KeyPairGenerator.getInstance("RSA");
             keyPairGen.initialize(1024);
-            //Generate the pair of keys
             KeyPair pair = keyPairGen.generateKeyPair();
-            //Getting the private key from the key pair
-            privKey = pair.getPrivate();
-            //Getting the public key from the key pair
-            publicKey = pair.getPublic();
+            this.privateKey = pair.getPrivate();
+            this.publicKey = pair.getPublic();
 
             this.decodeCipher = Cipher.getInstance("RSA");
-            decodeCipher.init(Cipher.DECRYPT_MODE, privKey);
+            decodeCipher.init(Cipher.DECRYPT_MODE, privateKey);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    private ReentrantLock reentrantLock = new ReentrantLock();
-
     public void send(InetSocketAddress receiver, Serializable payload) {
-        reentrantLock.lock();
-        System.out.println(payload);
         System.out.println("SEND");
-        if (!communicationPartner.containsKey(receiver)) {
-            endpoint.send(receiver, new KeyExchangeMessage(this.publicKey, true));
-            while (!communicationPartner.containsKey(receiver)) {
-                try {
-                    Thread.sleep(10);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
+
+        if (!communicationPartner.containsKey(receiver) ) {
+            System.out.println("Sending my key");
+            endpoint.send(receiver, new KeyExchangeMessage(publicKey, false));
+        }
+        while (!communicationPartner.containsKey(receiver) ) {
+            continue;
+        }
+
+        if (!communicationPartner.containsKey(receiver) ) {
+            System.out.println("Send my key");
+            endpoint.send(receiver, new KeyExchangeMessage(publicKey, false));
+        } else {
+            try {
+                Cipher encodeCipher = Cipher.getInstance("RSA");
+                encodeCipher.init(Cipher.ENCRYPT_MODE, communicationPartner.get(receiver));
+                endpoint.send(receiver, new SealedObject(payload, encodeCipher));
+            } catch (Exception exception) {
+                throw new RuntimeException(exception);
             }
         }
-        try {
-            Cipher encodeCipher = Cipher.getInstance("RSA");
-            encodeCipher.init(Cipher.ENCRYPT_MODE, communicationPartner.get(receiver));
-            new SealedObject(payload, encodeCipher);
-            endpoint.send(receiver, new SealedObject(payload, encodeCipher));
-        } catch (Exception exception) {
-            throw new RuntimeException(exception);
-        }
-        reentrantLock.unlock();
     }
 
     public Message blockingReceive() {
         System.out.println("blockingReceive");
-        Message message = null;
-        while (message == null || message.getPayload() instanceof KeyExchangeMessage) {
-            message = endpoint.blockingReceive();
-            if (message.getPayload() instanceof KeyExchangeMessage kem) {
-                communicationPartner.put(message.getSender(), kem.getPublicKey());
-                if (kem.getRespond()) {
-                    endpoint.send(message.getSender(), new KeyExchangeMessage(this.publicKey, false));
-                }
-            }
-        }
+        Message message = endpoint.blockingReceive();
         return decrypt(message);
     }
 
     public Message nonBlockingReceive() {
         System.out.println("nonBlockingReceive");
         Message message = endpoint.nonBlockingReceive();
-
         return decrypt(message);
     }
 
     private Message decrypt(Message message) {
-        try {
-            SealedObject so = (SealedObject) message.getPayload();
-            return new Message((Serializable) so.getObject(decodeCipher), message.getSender());
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
+        if (message.getPayload() instanceof KeyExchangeMessage keyExchangeMsg) {
+            System.out.println("Got a key");
+            communicationPartner.put(message.getSender(), keyExchangeMsg.getPublicKey());
+            endpoint.send(message.getSender(), new KeyExchangeMessage(publicKey, false));
+            return new Message(new Blank(), message.getSender());
+        } else {
+            try {
+                System.out.println(message.getPayload());
+
+                SealedObject so = (SealedObject) message.getPayload();
+                Message encryptMessage = new Message((Serializable) so.getObject(decodeCipher), message.getSender());
+
+                System.out.println(encryptMessage.getPayload());
+
+                return encryptMessage;
+            } catch (Exception e) {
+                e.printStackTrace();
+                return null;
+            }
         }
     }
 }
