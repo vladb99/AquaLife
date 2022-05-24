@@ -22,10 +22,9 @@ public class SecureEndpoint {
     private Cipher decodeCipher;
 
     Map<InetSocketAddress, PublicKey> communicationPartner = new HashMap<>();
+    Map<InetSocketAddress, Serializable> toSendLater = new HashMap<>();
     private PrivateKey privateKey;
     private PublicKey publicKey;
-
-
 
     public SecureEndpoint() {
         this.endpoint = new Endpoint();
@@ -55,18 +54,10 @@ public class SecureEndpoint {
 
     public void send(InetSocketAddress receiver, Serializable payload) {
         System.out.println("SEND");
-
         if (!communicationPartner.containsKey(receiver) ) {
             System.out.println("Sending my key");
             endpoint.send(receiver, new KeyExchangeMessage(publicKey, false));
-        }
-        while (!communicationPartner.containsKey(receiver) ) {
-            continue;
-        }
-
-        if (!communicationPartner.containsKey(receiver) ) {
-            System.out.println("Send my key");
-            endpoint.send(receiver, new KeyExchangeMessage(publicKey, false));
+            toSendLater.put(receiver, payload);
         } else {
             try {
                 Cipher encodeCipher = Cipher.getInstance("RSA");
@@ -94,7 +85,12 @@ public class SecureEndpoint {
         if (message.getPayload() instanceof KeyExchangeMessage keyExchangeMsg) {
             System.out.println("Got a key");
             communicationPartner.put(message.getSender(), keyExchangeMsg.getPublicKey());
-            endpoint.send(message.getSender(), new KeyExchangeMessage(publicKey, false));
+            if (!toSendLater.containsKey(message.getSender())) {
+                endpoint.send(message.getSender(), new KeyExchangeMessage(publicKey, false));
+                toSendLater.put(message.getSender(), null);
+            } else {
+                send(message.getSender(), toSendLater.get(message.getSender()));
+            }
             return new Message(new Blank(), message.getSender());
         } else {
             try {
