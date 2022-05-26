@@ -33,7 +33,7 @@ public class SecureEndpoint {
             //Creating KeyPair generator object
             KeyPairGenerator keyPairGen = KeyPairGenerator.getInstance("RSA");
             //Initializing the KeyPairGenerator
-            keyPairGen.initialize(1024);
+            keyPairGen.initialize(4096);
             //Generate the pair of keys
             KeyPair pair = keyPairGen.generateKeyPair();
             //Getting the private key from the key pair
@@ -52,8 +52,6 @@ public class SecureEndpoint {
 
     public void send(InetSocketAddress receiver, Serializable payload) {
         reentrantLock.lock();
-        System.out.println(payload);
-        System.out.println("SEND");
         if (!communicationPartner.containsKey(receiver)) {
             endpoint.send(receiver, new KeyExchangeMessage(this.publicKey, true));
             while (!communicationPartner.containsKey(receiver)) {
@@ -64,6 +62,8 @@ public class SecureEndpoint {
                 }
             }
         }
+        reentrantLock.unlock();
+
         try {
             Cipher encodeCipher = Cipher.getInstance("RSA");
             encodeCipher.init(Cipher.ENCRYPT_MODE, communicationPartner.get(receiver));
@@ -72,11 +72,10 @@ public class SecureEndpoint {
         } catch (Exception exception) {
             throw new RuntimeException(exception);
         }
-        reentrantLock.unlock();
+
     }
 
     public Message blockingReceive() {
-        System.out.println("blockingReceive");
         Message message = null;
         while (message == null || message.getPayload() instanceof KeyExchangeMessage) {
             message = endpoint.blockingReceive();
@@ -91,9 +90,21 @@ public class SecureEndpoint {
     }
 
     public Message nonBlockingReceive() {
-        System.out.println("nonBlockingReceive");
-        Message message = endpoint.nonBlockingReceive();
+        Message message = null;
+        while (message == null || message.getPayload() instanceof KeyExchangeMessage) {
+            message = endpoint.nonBlockingReceive();
 
+            if(message == null){
+                return null;
+            }
+
+            if (message.getPayload() instanceof KeyExchangeMessage kem) {
+                communicationPartner.put(message.getSender(), kem.getPublicKey());
+                if (kem.getRespond()) {
+                    endpoint.send(message.getSender(), new KeyExchangeMessage(this.publicKey, false));
+                }
+            }
+        }
         return decrypt(message);
     }
 
