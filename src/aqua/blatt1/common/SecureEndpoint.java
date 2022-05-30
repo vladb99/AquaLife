@@ -2,7 +2,7 @@ package aqua.blatt1.common;
 
 import aqua.blatt1.common.msgtypes.KeyExchangeMessage;
 import messaging.Endpoint;
-import messaging.Message;
+import aqua.blatt1.common.Message;
 
 import javax.crypto.*;
 import javax.crypto.spec.SecretKeySpec;

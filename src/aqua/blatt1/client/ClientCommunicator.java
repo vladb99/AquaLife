@@ -5,7 +5,7 @@ import java.net.InetSocketAddress;
 import aqua.blatt1.common.*;
 import aqua.blatt1.common.msgtypes.*;
 import messaging.Endpoint;
-import messaging.Message;
+import aqua.blatt1.common.Message;
 
 public class ClientCommunicator {
 	private final SecureEndpoint endpoint;

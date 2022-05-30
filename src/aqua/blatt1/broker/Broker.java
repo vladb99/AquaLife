@@ -1,16 +1,17 @@
 package aqua.blatt1.broker;
 
-import aqua.blatt1.common.Direction;
-import aqua.blatt1.common.FishModel;
+import aqua.blatt1.client.AquaClient;
 import aqua.blatt1.common.Properties;
 import aqua.blatt1.common.SecureEndpoint;
 import aqua.blatt1.common.msgtypes.*;
-import messaging.Endpoint;
-import messaging.Message;
+import aqua.blatt1.common.Message;
 
 import javax.swing.*;
 import java.io.Serializable;
-import java.net.InetSocketAddress;
+import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
+import java.rmi.server.UnicastRemoteObject;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -21,9 +22,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class Broker {
+public class Broker implements AquaBroker {
     private final SecureEndpoint endpoint;
-    private final ClientCollection<InetSocketAddress> clients;
+    private final ClientCollection<AquaClient> clients;
     private volatile Integer currentId;
     private volatile static boolean stopRequested = false;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
@@ -32,7 +33,7 @@ public class Broker {
 
     //Heimatgestützt
     //Namespace - TankId zu InetSocketAddress
-    Map<String, InetSocketAddress> namespace = new HashMap<>();
+    Map<String, AquaClient> namespace = new HashMap<>();
 
     public Broker(int port) {
         endpoint = new SecureEndpoint(port);
@@ -50,30 +51,34 @@ public class Broker {
         @Override
         public void run() {
             Serializable payload = message.getPayload();
-            InetSocketAddress sender = message.getSender();
+            AquaClient sender = message.getSender();
 
-            if (payload instanceof RegisterRequest) {
-                register(sender);
-            }
-            if (payload instanceof DeregisterRequest dr) {
-                deregister(sender);
-            }
-            if (payload instanceof HandoffRequest) {
-                handoffFish(sender, payload);
-            }
-            if (payload instanceof NameResolutionRequest e) {
-                handleNameResolutionRequest(sender, e);
+            try {
+                if (payload instanceof RegisterRequest) {
+                    register(sender);
+                }
+                if (payload instanceof DeregisterRequest dr) {
+                    deregister(sender);
+                }
+                if (payload instanceof NameResolutionRequest e) {
+                    handleNameResolutionRequest(sender, e);
+                }
+            } catch (RemoteException ex) {
+                ex.printStackTrace();
             }
         }
     }
 
-    private void handleNameResolutionRequest(InetSocketAddress sender, NameResolutionRequest nrr) {
+    @Override
+    public void handleNameResolutionRequest(AquaClient sender, NameResolutionRequest nrr) throws RemoteException {
         lock.readLock().lock();
-        endpoint.send(sender, new NameResolutionResponse(namespace.get(nrr.getTankId()), nrr.getRequestId()));
+        sender.handleNameResolutionResponse(namespace.get(nrr.getTankId()), nrr.getRequestId());
+        //endpoint.send(sender, new NameResolutionResponse(namespace.get(nrr.getTankId()), nrr.getRequestId()));
         lock.readLock().unlock();
     }
 
-    private synchronized void register(InetSocketAddress sender) {
+    @Override
+    public synchronized void register(AquaClient sender) throws RemoteException {
         lock.writeLock().lock();
         int index = clients.indexOf(sender);
         if (index != -1) {
@@ -95,31 +100,37 @@ public class Broker {
         lock.writeLock().unlock();
 
         lock.readLock().lock();
-        InetSocketAddress leftNeighbor = clients.getLeftNeighorOf(clients.indexOf(id));
-        InetSocketAddress rightNeighbor = clients.getRightNeighorOf(clients.indexOf(id));
+        AquaClient leftNeighbor = clients.getLeftNeighorOf(clients.indexOf(id));
+        AquaClient rightNeighbor = clients.getRightNeighorOf(clients.indexOf(id));
 
-        InetSocketAddress leftLeftNeighbor = clients.getLeftNeighorOf(clients.indexOf(leftNeighbor));
-        InetSocketAddress rightRightNeighbor = clients.getRightNeighorOf(clients.indexOf(rightNeighbor));
+        AquaClient leftLeftNeighbor = clients.getLeftNeighorOf(clients.indexOf(leftNeighbor));
+        AquaClient rightRightNeighbor = clients.getRightNeighorOf(clients.indexOf(rightNeighbor));
 
         if (clients.size() == 1) {
-            endpoint.send(sender, new Token());
+            sender.handleToken(sender, new Token());
+            //endpoint.send(sender, new Token());
         }
         lock.readLock().unlock();
-        System.out.println("IS SENDER NULL?" + (sender == null));
-        endpoint.send(sender, new NeighborUpdate(leftNeighbor, rightNeighbor));
+        //System.out.println("IS SENDER NULL?" + (sender == null));
+        sender.handleNeighborUpdate(sender, new NeighborUpdate(leftNeighbor, rightNeighbor));
+        //endpoint.send(sender, new NeighborUpdate(leftNeighbor, rightNeighbor));
         // TODO check if is better to make it relative to number of registered clients
-        endpoint.send(sender, new RegisterResponse(id, LEASE_TIME));
-        endpoint.send(leftNeighbor, new NeighborUpdate(leftLeftNeighbor, sender));
-        endpoint.send(rightNeighbor, new NeighborUpdate(sender, rightRightNeighbor));
+        sender.handleRegisterResponse(sender, new RegisterResponse(id, LEASE_TIME));
+        //endpoint.send(sender, new RegisterResponse(id, LEASE_TIME));
+        sender.handleNeighborUpdate(leftNeighbor, new NeighborUpdate(leftLeftNeighbor, sender));
+        //endpoint.send(leftNeighbor, new NeighborUpdate(leftLeftNeighbor, sender));
+        sender.handleNeighborUpdate(rightNeighbor, new NeighborUpdate(sender, rightRightNeighbor));
+        //endpoint.send(rightNeighbor, new NeighborUpdate(sender, rightRightNeighbor));
     }
 
-    private void deregister(InetSocketAddress sender) {
+    @Override
+    public void deregister(AquaClient sender) throws RemoteException {
         lock.readLock().lock();
-        InetSocketAddress leftNeighbor = clients.getLeftNeighorOf(clients.indexOf(sender));
-        InetSocketAddress rightNeighbor = clients.getRightNeighorOf(clients.indexOf(sender));
+        AquaClient leftNeighbor = clients.getLeftNeighorOf(clients.indexOf(sender));
+        AquaClient rightNeighbor = clients.getRightNeighorOf(clients.indexOf(sender));
 
-        InetSocketAddress leftLeftNeighbor = clients.getLeftNeighorOf(clients.indexOf(leftNeighbor));
-        InetSocketAddress rightRightNeighbor = clients.getRightNeighorOf(clients.indexOf(rightNeighbor));
+        AquaClient leftLeftNeighbor = clients.getLeftNeighorOf(clients.indexOf(leftNeighbor));
+        AquaClient rightRightNeighbor = clients.getRightNeighorOf(clients.indexOf(rightNeighbor));
         lock.readLock().unlock();
 
         lock.writeLock().lock();
@@ -130,29 +141,13 @@ public class Broker {
 
         lock.writeLock().unlock();
 
-        endpoint.send(leftNeighbor, new NeighborUpdate(leftLeftNeighbor, rightNeighbor));
-        endpoint.send(rightNeighbor, new NeighborUpdate(leftNeighbor, rightRightNeighbor));
+        sender.handleNeighborUpdate(leftLeftNeighbor, new NeighborUpdate(leftLeftNeighbor, rightNeighbor));
+        //endpoint.send(leftNeighbor, new NeighborUpdate(leftLeftNeighbor, rightNeighbor));
+        sender.handleNeighborUpdate(rightNeighbor, new NeighborUpdate(leftNeighbor, rightRightNeighbor));
+        //endpoint.send(rightNeighbor, new NeighborUpdate(leftNeighbor, rightRightNeighbor));
     }
 
-    private void handoffFish(InetSocketAddress sender, Serializable payload) {
-        HandoffRequest hor = (HandoffRequest) payload;
-        FishModel fish = hor.getFish();
-        InetSocketAddress target = null;
-
-        lock.readLock().lock();
-
-        if (fish.getDirection().equals(Direction.LEFT)) {
-            target = clients.getLeftNeighorOf(clients.indexOf(sender));
-        } else {
-            target = clients.getRightNeighorOf(clients.indexOf(sender));
-        }
-
-        lock.readLock().unlock();
-
-        endpoint.send(target, hor);
-    }
-
-    public static void main(String[] args) {
+    public static void main(String[] args) throws RemoteException {
         Thread guiThread = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -164,6 +159,13 @@ public class Broker {
 
         Broker broker = new Broker(Properties.PORT);
         broker.broker();
+
+        Registry registry = LocateRegistry.createRegistry(
+                Registry.REGISTRY_PORT);
+        // TODO check if Properties.PORT works
+        AquaBroker stub = (AquaBroker)
+                UnicastRemoteObject.exportObject(broker, 0);
+        registry.rebind(Properties.BROKER_NAME, stub);
     }
 
     public void broker() {
@@ -172,7 +174,13 @@ public class Broker {
             @Override
             public void run() {
                 clients.getClients().stream().filter(client -> client.instant.isBefore(Instant.now().minusMillis(LEASE_TIME * 3)))
-                        .forEach(client -> deregister(client.client));
+                        .forEach(client -> {
+                            try {
+                                deregister(client.client);
+                            } catch (RemoteException e) {
+                                e.printStackTrace();
+                            }
+                        });
             }
         }, 5000, 15000);
         // POOL_SIZE = 4 / 0.7 = 6

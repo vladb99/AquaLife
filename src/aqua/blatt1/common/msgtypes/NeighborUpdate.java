@@ -1,22 +1,24 @@
 package aqua.blatt1.common.msgtypes;
 
+import aqua.blatt1.client.AquaClient;
+
 import java.io.Serializable;
 import java.net.InetSocketAddress;
 
 public final class NeighborUpdate implements Serializable {
-    private final InetSocketAddress rightNeighbor;
-    private final InetSocketAddress leftNeighbor;
+    private final AquaClient rightNeighbor;
+    private final AquaClient leftNeighbor;
 
-    public NeighborUpdate(InetSocketAddress neighborLeft, InetSocketAddress neighborRight) {
+    public NeighborUpdate(AquaClient neighborLeft, AquaClient neighborRight) {
         this.rightNeighbor = neighborRight;
         this.leftNeighbor = neighborLeft;
     }
 
-    public InetSocketAddress getRightNeighbor() {
+    public AquaClient getRightNeighbor() {
         return rightNeighbor;
     }
 
-    public InetSocketAddress getLeftNeighbor() {
+    public AquaClient getLeftNeighbor() {
         return leftNeighbor;
     }
 }
